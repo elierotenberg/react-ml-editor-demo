@@ -1,10 +1,9 @@
-import babel from 'gulp-babel';
-import changed from 'gulp-changed';
 import gulp from 'gulp';
+import gutil from 'gulp-util';
 import path from 'path';
-import plumber from 'gulp-plumber';
+import webpack from 'webpack';
 
-import babelConfig from '../../babel';
+import webpackConfig from '../../webpack';
 
 const root = path.join(
   __dirname, // /config/gulp/tasks
@@ -15,42 +14,31 @@ const root = path.join(
 
 const app = path.join(root, 'app');
 
+const www = path.join(root, 'www');
+
 const sources = [
-  path.join(app, '**', '*.jsx'),
-  path.join(app, '**', '*.js'),
+  path.join(app, 'www', '**', '*.jsx'),
+  path.join(app, 'www', '**', '*.js'),
 ];
 
-const misc = sources.map((source) => `!${source}`).concat(path.join(app, '**', '*'));
+const misc = sources.map((source) => `!${source}`).concat(path.join(app, 'www', '**', '*'));
 
-const dist = path.join(root, 'dist');
-
-function createCopy(platform, env) {
-  return () => gulp.src(misc)
-  .pipe(changed(path.join(dist, platform, env, 'app'), { hasChanged: changed.compareSha1Digest }))
-  .pipe(gulp.dest(path.join(dist, platform, env, 'app')));
-}
-
-function createBuild(platform, env) {
-  return () => gulp.src(sources)
-    .pipe(plumber({
-      errorHandler: (err) => console.error(err.stack),
-    }))
-    .pipe(changed(path.join(dist, platform, env, 'app'), { extension: '.js', hasChanged: changed.compareSha1Digest }))
-    .pipe(babel(Object.assign({}, babelConfig[platform][env], { sourceMaps: 'both', retainLines: true })))
-    .pipe(gulp.dest(path.join(dist, platform, env, 'app')))
+function createBuild(env) {
+  return (cb) => webpack(webpackConfig[env], (err) => {
+    if(err) {
+      throw new gutil.PluginError('webpack', err);
+    }
+    cb();
+  })
   ;
 }
 
 export default () => {
-  gulp.task('build', Object.keys(babelConfig).map((platform) => {
-    const buildPlatformTaskName = `build-${platform}`;
-    gulp.task(buildPlatformTaskName, Object.keys(babelConfig[platform]).map((env) => {
-      const buildEnvTaskName = `build-${platform}-${env}`;
-      const copyEnvTaskName = `copy-${platform}-${env}`;
-      gulp.task(copyEnvTaskName, [`clean-${platform}-${env}`], createCopy(platform, env));
-      gulp.task(buildEnvTaskName, [copyEnvTaskName, 'lint'], createBuild(platform, env));
-      return buildEnvTaskName;
-    }));
-    return buildPlatformTaskName;
-  }));
+  gulp.task('copy-misc', () =>
+    gulp.src(misc)
+    .pipe(gulp.dest(www))
+  );
+  const envs = Object.keys(webpackConfig);
+  envs.forEach((env) => gulp.task(`build-${env}`, ['copy-misc'], createBuild(env)));
+  gulp.task('build', envs.map((env) => `build-${env}`));
 };

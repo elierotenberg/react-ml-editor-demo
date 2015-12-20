@@ -1,6 +1,6 @@
 require('babel-register')({
   only: ['config'],
-  presets: ['./config/babel/node/dev'],
+  presets: ['./config/babel/browser/dev'],
   retainLines: true,
 });
 require('babel-polyfill');
